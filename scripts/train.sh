@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# Usage: sh scripts/train.sh -p python -d semantic_kitti -c semseg-pt-v3m1 -n semseg-pt-v3m1-0
+
 cd $(dirname $(dirname "$0")) || exit
 ROOT_DIR=$(pwd)
 PYTHON=python
