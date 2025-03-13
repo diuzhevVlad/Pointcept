@@ -79,7 +79,13 @@ RUN TORCH_CUDA_ARCH_LIST="5.2 6.0 6.1 7.0+PTX 8.0" pip install Pointcept/libs/po
 # Build swin3d
 RUN TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0+PTX 8.0" pip install -U git+https://github.com/microsoft/Swin3D.git -v
 
+# Flash attention for PT-v3
 RUN pip install flash-attn===2.5.0 --no-build-isolation
+
+# Tensorboard essentials
+RUN apt-get update && apt-get install libx11-6 ffmpeg libsm6 libxext6 -y
+
+WORKDIR /workspace/Pointcept
 
 EOM
 

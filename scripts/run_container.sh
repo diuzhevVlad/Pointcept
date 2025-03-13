@@ -10,5 +10,6 @@ docker run \
   --gpus all \
   -e=DISPLAY \
   -v ${DATASET_PATH}:/workspace/Pointcept/data/semantic_kitti/ \
+  -v "./$(dirname "$0")/../exp":/workspace/Pointcept/exp \
   ${IMG_TAG} \
-  zsh
+  bash
