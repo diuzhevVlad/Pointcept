@@ -55,7 +55,10 @@ RUN export DEBIAN_FRONTEND=noninteractive \
 
 # Install Pointcept environment
 RUN conda install h5py pyyaml -c anaconda -y
-RUN conda install sharedarray tensorboard tensorboardx yapf addict einops scipy plyfile termcolor timm -c conda-forge -y
+RUN conda install sharedarray -c conda-forge -y
+RUN conda install tensorboard -y
+RUN conda install tensorboardx -y
+RUN conda install yapf addict einops scipy plyfile termcolor timm -c conda-forge -y
 RUN conda install pytorch-cluster pytorch-scatter pytorch-sparse -c pyg -y
 
 RUN pip install --upgrade pip
