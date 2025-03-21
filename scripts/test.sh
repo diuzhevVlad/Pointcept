@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# Usage: sh scripts/test.sh -p python -d semantic_kitti -c semseg-pt-v3m1 -n semseg-pt-v3m1-0 -w model_best
+
 cd $(dirname $(dirname "$0")) || exit
 PYTHON=python
 
@@ -37,9 +39,9 @@ while getopts "p:d:c:n:w:g:" opt; do
   esac
 done
 
-if [ "${NUM_GPU}" = 'None' ]
+if [ "${GPU}" = 'None' ]
 then
-  NUM_GPU=`$PYTHON -c 'import torch; print(torch.cuda.device_count())'`
+  GPU=`$PYTHON -c 'import torch; print(torch.cuda.device_count())'`
 fi
 
 echo "Experiment name: $EXP_NAME"

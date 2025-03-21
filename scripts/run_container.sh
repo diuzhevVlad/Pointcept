@@ -10,6 +10,9 @@ docker run \
   --gpus all \
   -e=DISPLAY \
   -v ${DATASET_PATH}:/workspace/Pointcept/data/semantic_kitti/ \
-  -v "./$(dirname "$0")/../exp":/workspace/Pointcept/exp \
+  -v "./$(dirname "$0")/..":/workspace/Pointcept \
   ${IMG_TAG} \
   bash
+
+  # -v "./$(dirname "$0")/../exp":/workspace/Pointcept/exp \
+  # -v "./$(dirname "$0")":/workspace/Pointcept/scripts \
