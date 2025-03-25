@@ -1,12 +1,12 @@
 data_config = dict(
-    type="CustomcustomDataset",
+    type="CustomDataset",
     data_root="data/custom",
     transform=[
         dict(
             type="GridSample",
             grid_size=0.05,
             hash_type="fnv",
-            mode="train",
+            mode="spec_test",
             keys=("coord", "strength", "segment"),
             return_grid_coord=True,
         ),
@@ -107,13 +107,13 @@ if __name__ == "__main__":
                 labels & 0xFFFF
             ).astype(np.int32)
             ds.set_description(str(np.unique(labels)))
-            # print(np.count_nonzero(labels), np.unique(labels))
+            # print(labels.shape)
             labels.astype(np.int32).tofile(
                 "data/labels/{}.label".format(str(i).zfill(6))
             )
-            data["feat"].cpu().numpy().reshape(-1).tofile(
-                "data/velodyne/{}.bin".format(str(i).zfill(6))
-            )
+            # data["feat"].cpu().numpy().reshape(-1).tofile(
+            #     "data/velodyne/{}.bin".format(str(i).zfill(6))
+            # )
 
             del data, output, probs, labels
             torch.cuda.empty_cache()

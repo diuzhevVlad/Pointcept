@@ -56,12 +56,12 @@ class DefaultDataset(Dataset):
         self.test_cfg = test_cfg if test_mode else None
 
         if test_mode:
-            self.test_voxelize = TRANSFORMS.build(self.test_cfg.voxelize)
+            self.test_voxelize = TRANSFORMS.build(self.test_cfg["voxelize"])
             self.test_crop = (
-                TRANSFORMS.build(self.test_cfg.crop) if self.test_cfg.crop else None
+                TRANSFORMS.build(self.test_cfg["crop"]) if self.test_cfg["crop"] else None
             )
-            self.post_transform = Compose(self.test_cfg.post_transform)
-            self.aug_transform = [Compose(aug) for aug in self.test_cfg.aug_transform]
+            self.post_transform = Compose(self.test_cfg["post_transform"])
+            self.aug_transform = [Compose(aug) for aug in self.test_cfg["aug_transform"]]
 
         self.data_list = self.get_data_list()
         logger = get_root_logger()

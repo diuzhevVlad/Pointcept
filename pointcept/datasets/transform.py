@@ -795,7 +795,7 @@ class GridSample(object):
     ):
         self.grid_size = grid_size
         self.hash = self.fnv_hash_vec if hash_type == "fnv" else self.ravel_hash_vec
-        assert mode in ["train", "test"]
+        assert mode in ["train", "test", "spec_test"]
         self.mode = mode
         self.keys = keys
         self.return_inverse = return_inverse
@@ -879,6 +879,24 @@ class GridSample(object):
                         data_part[key] = data_dict[key]
                 data_part_list.append(data_part)
             return data_part_list
+
+        elif self.mode == "spec_test":  # "train" mode
+            if self.return_grid_coord:
+                data_dict["grid_coord"] = grid_coord
+            if self.return_min_coord:
+                data_dict["min_coord"] = min_coord.reshape([1, 3])
+            if self.return_displacement:
+                displacement = (
+                    scaled_coord - grid_coord - 0.5
+                )  # [0, 1] -> [-0.5, 0.5] displacement to center
+                if self.project_displacement:
+                    displacement = np.sum(
+                        displacement * data_dict["normal"], axis=-1, keepdims=True
+                    )
+                data_dict["displacement"] = displacement
+            for key in self.keys:
+                data_dict[key] = data_dict[key]
+            return data_dict
         else:
             raise NotImplementedError
 

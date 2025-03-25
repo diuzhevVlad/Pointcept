@@ -6,7 +6,7 @@ from .defaults import DefaultDataset
 
 
 @DATASETS.register_module()
-class CustomcustomDataset(DefaultDataset):
+class CustomDataset(DefaultDataset):
     def __init__(self, ignore_index=-1, **kwargs):
         self.ignore_index = ignore_index
         self.learning_map_inv = self.get_learning_map_inv(ignore_index)
