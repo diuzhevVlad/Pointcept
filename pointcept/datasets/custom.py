@@ -15,7 +15,7 @@ class CustomDataset(DefaultDataset):
     def get_data_list(self):
         data_list = []
         seq_list = os.listdir(self.data_root)
-        for seq in seq_list:
+        for seq in sorted(seq_list):
             seq = str(seq).zfill(2)
             seq_folder = os.path.join(self.data_root, seq)
             seq_files = sorted(os.listdir(seq_folder))
