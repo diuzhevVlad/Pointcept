@@ -21,6 +21,30 @@ data_config = dict(
     test_mode=False,
 )
 
+data_config = dict(
+    type="SemanticKITTIDataset",
+    split="val",
+    data_root="data/semantic_kitti",
+    transform=[
+        dict(
+            type="GridSample",
+            grid_size=0.05,
+            hash_type="fnv",
+            mode="spec_test",
+            keys=("coord", "strength", "segment"),
+            return_grid_coord=True,
+        ),
+        dict(type="ToTensor"),
+        dict(
+            type="Collect",
+            keys=("coord", "grid_coord", "segment"),
+            feat_keys=("coord", "strength"),
+        ),
+    ],
+    test_mode=False,
+    ignore_index=-1,
+)
+
 model_config = dict(
     type="DefaultSegmentorV2",
     num_classes=19,
@@ -82,15 +106,6 @@ if __name__ == "__main__":
     load_state_info = model.load_state_dict(weight, strict=True)
 
     dataset = build_dataset(data_config)
-
-    # data_labels = []
-    # for i in range(42):
-    #     with open(
-    #         f"data/semantic_kitti/dataset/sequences/{'00' if i < 21 else '01'}/labels/{str(i if i < 21 else i - 21).zfill(6)}.label",
-    #         "rb",
-    #     ) as b:
-    #         labels = np.fromfile(b, dtype=np.int32).reshape(-1)
-    #         data_labels.append(labels.copy())
 
     with torch.no_grad():
         ds = tqdm.tqdm(range(len(dataset)))
