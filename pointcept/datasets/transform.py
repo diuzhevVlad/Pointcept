@@ -271,6 +271,24 @@ class RandomRotate(object):
             data_dict["normal"] = np.dot(data_dict["normal"], np.transpose(rot_t))
         return data_dict
 
+@TRANSFORMS.register_module()
+class RandomVerticalCrop(object):
+    def __init__(self, min_height_threshold=0, always_apply=False, p=0.2):
+        self.height_threshold = min_height_threshold
+        self.always_apply = always_apply
+        self.p = p if not self.always_apply else 1
+
+    def __call__(self, data_dict):
+        if random.random() > self.p:
+            return data_dict
+        
+        if "coord" in data_dict.keys():
+            threshold = np.random.uniform(self.height_threshold, max(self.height_threshold, data_dict["coord"][:, 2].max()))
+            idx_crop = np.where(data_dict["coord"][:, 2] < threshold)[0]
+            data_dict = index_operator(data_dict, idx_crop)
+
+        return data_dict
+
 
 @TRANSFORMS.register_module()
 class RandomRotateTargetAngle(object):
