@@ -10,20 +10,20 @@ enable_amp = True
 model = dict(
     type="DefaultSegmentorV2",
     num_classes=5,
-    backbone_out_channels=96,
+    backbone_out_channels=64,
     backbone=dict(
-        type="PT-v3m1-img",
-        in_channels=10,
+        type="PT-v3m1",
+        in_channels=4,
         order=["z", "z-trans", "hilbert", "hilbert-trans"],
         stride=(2, 2, 2, 2),
         enc_depths=(2, 2, 2, 6, 2),
         enc_channels=(32, 64, 128, 256, 512),
         enc_num_head=(2, 4, 8, 16, 32),
-        enc_patch_size=(128, 128, 128, 128, 128),
+        enc_patch_size=(1024, 1024, 1024, 1024, 1024),
         dec_depths=(2, 2, 2, 2),
         dec_channels=(64, 64, 128, 256),
         dec_num_head=(4, 4, 8, 16),
-        dec_patch_size=(128, 128, 128, 128),
+        dec_patch_size=(1024, 1024, 1024, 1024),
         mlp_ratio=4,
         qkv_bias=True,
         qk_scale=None,
@@ -42,15 +42,11 @@ model = dict(
         pdnorm_decouple=True,
         pdnorm_adaptive=False,
         pdnorm_affine=True,
-        pdnorm_conditions=("SemanticKITTI",),
-        img_in_channels=3,
-        img_feat_channels=32,
-        img_patch_size=14,
+        pdnorm_conditions=("RoadConditionKITTI",),
     ),
     criteria=[
-        dict(type="FocalLoss", gamma=2.0, alpha=0.5, loss_weight=1.0, ignore_index=-1),
+        dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
         dict(type="LovaszLoss", mode="multiclass", loss_weight=1.0, ignore_index=-1),
-        dict(type="DiceLoss", loss_weight=0.5, ignore_index=-1),
     ],
 )
 
@@ -69,8 +65,8 @@ scheduler = dict(
 param_dicts = [dict(keyword="block", lr=0.0002)]
 
 # dataset settings
-dataset_type = "RoadConditionKITTIDataset"
-data_root = "/data"
+dataset_type = "RoadConditionKITTIPointDataset"
+data_root = "data/road_condition_kitti"
 ignore_index = -1
 names = [
     "nonroad",
@@ -80,16 +76,6 @@ names = [
     "slush",
 ]
 
-index_valid_keys = (
-    "coord",
-    "color",
-    "normal",
-    "strength",
-    "segment",
-    "instance",
-    "correspondence",
-)
-
 data = dict(
     num_classes=5,
     ignore_index=ignore_index,
@@ -97,20 +83,11 @@ data = dict(
     train=dict(
         type=dataset_type,
         split="train",
-        if_img=True,
         data_root=data_root,
         transform=[
-            dict(type="Update", keys_dict={"index_valid_keys": index_valid_keys}),
-            dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.6),
             dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            dict(type="RandomRotate", angle=[-1 / 6, 1 / 6], axis="x", p=0.2),
-            dict(type="RandomRotate", angle=[-1 / 6, 1 / 6], axis="y", p=0.2),
-            dict(type="RandomScale", scale=[0.95, 1.05]),
-            dict(
-                type="RandomShift",
-                shift=((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0)),
-            ),
-            dict(type="RandomFlip", p=0.3),
+            dict(type="RandomScale", scale=[0.9, 1.1]),
+            dict(type="RandomFlip", p=0.5),
             dict(type="RandomJitter", sigma=0.005, clip=0.02),
             dict(
                 type="GridSample",
@@ -119,11 +96,14 @@ data = dict(
                 mode="train",
                 return_grid_coord=True,
             ),
+            dict(type="PointClip", point_cloud_range=(-35.2, -35.2, -4, 35.2, 35.2, 2)),
+            dict(type="SphereCrop", sample_rate=0.8, mode="random"),
+            dict(type="SphereCrop", point_max=120000, mode="random"),
             dict(type="ToTensor"),
             dict(
                 type="Collect",
-                keys=("coord", "grid_coord", "segment", "images", "correspondence", "img_num"),
-                feat_keys=("coord", "color", "normal", "strength"),
+                keys=("coord", "grid_coord", "segment"),
+                feat_keys=("coord", "strength"),
             ),
         ],
         test_mode=False,
@@ -132,29 +112,23 @@ data = dict(
     val=dict(
         type=dataset_type,
         split="val",
-        if_img=True,
         data_root=data_root,
         transform=[
-            dict(type="Update", keys_dict={"index_valid_keys": index_valid_keys}),
+            dict(type="Copy", keys_dict={"segment": "origin_segment"}),
             dict(
                 type="GridSample",
                 grid_size=0.05,
                 hash_type="fnv",
                 mode="train",
                 return_grid_coord=True,
+                return_inverse=True,
             ),
+            dict(type="PointClip", point_cloud_range=(-35.2, -35.2, -4, 35.2, 35.2, 2)),
             dict(type="ToTensor"),
             dict(
                 type="Collect",
-                keys=(
-                    "coord",
-                    "grid_coord",
-                    "segment",
-                    "images",
-                    "correspondence",
-                    "img_num",
-                ),
-                feat_keys=("coord", "color", "normal", "strength"),
+                keys=("coord", "grid_coord", "segment", "origin_segment", "inverse"),
+                feat_keys=("coord", "strength"),
             ),
         ],
         test_mode=False,
@@ -163,10 +137,17 @@ data = dict(
     test=dict(
         type=dataset_type,
         split="val",
-        if_img=True,
         data_root=data_root,
         transform=[
-            dict(type="Update", keys_dict={"index_valid_keys": index_valid_keys}),
+            dict(type="PointClip", point_cloud_range=(-35.2, -35.2, -4, 35.2, 35.2, 2)),
+            dict(type="Copy", keys_dict={"segment": "origin_segment"}),
+            dict(
+                type="GridSample",
+                grid_size=0.025,
+                hash_type="fnv",
+                mode="train",
+                return_inverse=True,
+            ),
         ],
         test_mode=True,
         test_cfg=dict(
@@ -182,8 +163,8 @@ data = dict(
                 dict(type="ToTensor"),
                 dict(
                     type="Collect",
-                    keys=("coord", "grid_coord", "index", "images", "correspondence", "img_num"),
-                    feat_keys=("coord", "color", "normal", "strength"),
+                    keys=("coord", "grid_coord", "index"),
+                    feat_keys=("coord", "strength"),
                 ),
             ],
             aug_transform=[

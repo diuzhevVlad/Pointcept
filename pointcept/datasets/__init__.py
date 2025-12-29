@@ -14,7 +14,9 @@ from .aeo import AEODataset
 # outdoor scene
 from .semantic_kitti import (
     SemanticKITTIDataset,
+    SemanticKITTIMultiModalDataset,
     RoadConditionKITTIDataset,
+    RoadConditionKITTIPointDataset,
 )
 from .nuscenes import NuScenesDataset
 from .waymo import WaymoDataset

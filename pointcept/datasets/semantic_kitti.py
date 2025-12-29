@@ -677,9 +677,9 @@ class RoadConditionKITTIDataset(SemanticKITTIImagePointDataset):
             1: 1,  # dry
             2: 2,  # wet
             3: 3,  # snow
-            4: 4,  # pothole
-            5: 5,  # hill
-            6: 6,  # slush
+            4: ignore_index,  # pothole (ignored)
+            5: ignore_index,  # hill (ignored)
+            6: 4,  # slush
         }
         return {
             raw_id: learning_map.get(raw_id, ignore_index)
@@ -694,8 +694,17 @@ class RoadConditionKITTIDataset(SemanticKITTIImagePointDataset):
             1: 1,  # dry
             2: 2,  # wet
             3: 3,  # snow
-            4: 4,  # pothole
-            5: 5,  # hill
-            6: 6,  # slush
+            4: 6,  # slush
         }
         return learning_map_inv
+
+
+@DATASETS.register_module()
+class RoadConditionKITTIPointDataset(SemanticKITTIDataset):
+    def __init__(self, ignore_index=-1, **kwargs):
+        self.ignore_index = ignore_index
+        self.learning_map = RoadConditionKITTIDataset.get_learning_map(ignore_index)
+        self.learning_map_inv = RoadConditionKITTIDataset.get_learning_map_inv(
+            ignore_index
+        )
+        super().__init__(ignore_index=ignore_index, **kwargs)
