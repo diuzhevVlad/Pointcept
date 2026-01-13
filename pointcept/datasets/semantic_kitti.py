@@ -640,7 +640,6 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
         seq_list = sorted(seq_list)
 
         data_list = []
-        split_list = {"train": [], "val": [], "test": []}
         for seq in seq_list:
             seq2 = str(seq).zfill(2)
             seq_folder = os.path.join(self.data_root, "sequences", seq2)
@@ -648,25 +647,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
             data_list += [
                 os.path.join(seq_folder, "velodyne", file) for file in seq_files
             ]
-            if seq in split2seq["train"]:
-                split_list["train"].extend(
-                    [os.path.join(seq_folder, "velodyne", file) for file in seq_files]
-                )
-            elif seq in split2seq["val"]:
-                split_list["val"].extend(
-                    [os.path.join(seq_folder, "velodyne", file) for file in seq_files]
-                )
-            elif seq in split2seq["test"]:
-                split_list["test"].extend(
-                    [os.path.join(seq_folder, "velodyne", file) for file in seq_files]
-                )
-        _, self.sequence_offset, self.sequence_index = np.unique(
-            [os.path.dirname(os.path.dirname(data)) for data in data_list],
-            return_index=True,
-            return_inverse=True,
-        )
-        self.sequence_offset = np.append(self.sequence_offset, len(data_list))
-        return data_list, split_list
+        return data_list
 
     @staticmethod
     def get_learning_map(ignore_index):
