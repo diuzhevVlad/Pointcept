@@ -9,7 +9,7 @@ enable_amp = True
 # model settings
 model = dict(
     type="DefaultSegmentorV2",
-    num_classes=5,
+    num_classes=6,
     backbone_out_channels=64,
     backbone=dict(
         type="PT-v3m1",
@@ -74,10 +74,11 @@ names = [
     "wet",
     "snow",
     "slush",
+    "moisture",
 ]
 
 data = dict(
-    num_classes=5,
+    num_classes=6,
     ignore_index=ignore_index,
     names=names,
     train=dict(
@@ -85,9 +86,13 @@ data = dict(
         split="train",
         data_root=data_root,
         transform=[
+            dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.6),
             dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            dict(type="RandomScale", scale=[0.9, 1.1]),
-            dict(type="RandomFlip", p=0.5),
+            dict(type="RandomRotate", angle=[-1/6, 1/6], axis="x", p=0.2),
+            dict(type="RandomRotate", angle=[-1/6, 1/6], axis="y", p=0.2),
+            dict(type="RandomScale", scale=[0.95, 1.05]),
+            dict(type="RandomShift", shift=((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))),
+            dict(type="RandomFlip", p=0.3),
             dict(type="RandomJitter", sigma=0.005, clip=0.02),
             dict(
                 type="GridSample",
@@ -96,9 +101,6 @@ data = dict(
                 mode="train",
                 return_grid_coord=True,
             ),
-            dict(type="PointClip", point_cloud_range=(-35.2, -35.2, -4, 35.2, 35.2, 2)),
-            dict(type="SphereCrop", sample_rate=0.8, mode="random"),
-            dict(type="SphereCrop", point_max=120000, mode="random"),
             dict(type="ToTensor"),
             dict(
                 type="Collect",
@@ -114,20 +116,17 @@ data = dict(
         split="val",
         data_root=data_root,
         transform=[
-            dict(type="Copy", keys_dict={"segment": "origin_segment"}),
             dict(
                 type="GridSample",
                 grid_size=0.05,
                 hash_type="fnv",
                 mode="train",
                 return_grid_coord=True,
-                return_inverse=True,
             ),
-            dict(type="PointClip", point_cloud_range=(-35.2, -35.2, -4, 35.2, 35.2, 2)),
             dict(type="ToTensor"),
             dict(
                 type="Collect",
-                keys=("coord", "grid_coord", "segment", "origin_segment", "inverse"),
+                keys=("coord", "grid_coord", "segment"),
                 feat_keys=("coord", "strength"),
             ),
         ],
@@ -139,15 +138,6 @@ data = dict(
         split="val",
         data_root=data_root,
         transform=[
-            dict(type="PointClip", point_cloud_range=(-35.2, -35.2, -4, 35.2, 35.2, 2)),
-            dict(type="Copy", keys_dict={"segment": "origin_segment"}),
-            dict(
-                type="GridSample",
-                grid_size=0.025,
-                hash_type="fnv",
-                mode="train",
-                return_inverse=True,
-            ),
         ],
         test_mode=True,
         test_cfg=dict(

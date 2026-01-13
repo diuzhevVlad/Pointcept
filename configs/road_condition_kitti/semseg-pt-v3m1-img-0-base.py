@@ -9,7 +9,7 @@ enable_amp = True
 # model settings
 model = dict(
     type="DefaultSegmentorV2",
-    num_classes=5,
+    num_classes=6,
     backbone_out_channels=96,
     backbone=dict(
         type="PT-v3m1-img",
@@ -78,6 +78,7 @@ names = [
     "wet",
     "snow",
     "slush",
+    "moisture",
 ]
 
 index_valid_keys = (
@@ -91,7 +92,7 @@ index_valid_keys = (
 )
 
 data = dict(
-    num_classes=5,
+    num_classes=6,
     ignore_index=ignore_index,
     names=names,
     train=dict(

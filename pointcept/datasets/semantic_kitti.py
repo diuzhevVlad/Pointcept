@@ -680,6 +680,7 @@ class RoadConditionKITTIDataset(SemanticKITTIImagePointDataset):
             4: ignore_index,  # pothole (ignored)
             5: ignore_index,  # hill (ignored)
             6: 4,  # slush
+            7: 5,  # moisture
         }
         return {
             raw_id: learning_map.get(raw_id, ignore_index)
@@ -695,6 +696,7 @@ class RoadConditionKITTIDataset(SemanticKITTIImagePointDataset):
             2: 2,  # wet
             3: 3,  # snow
             4: 6,  # slush
+            5: 7,  # moisture
         }
         return learning_map_inv
 
