@@ -14,7 +14,6 @@ from .aeo import AEODataset
 # outdoor scene
 from .semantic_kitti import (
     SemanticKITTIDataset,
-    SemanticKITTIMultiModalDataset,
     RoadConditionKITTIDataset,
     RoadConditionKITTIPointDataset,
 )
