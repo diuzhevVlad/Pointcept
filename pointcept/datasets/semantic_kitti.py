@@ -616,14 +616,12 @@ class SemanticKITTIImagePointDataset(DefaultImagePointDataset):
 
 
 @DATASETS.register_module()
-class RoadConditionKITTIDataset(SemanticKITTIImagePointDataset):
-    CAMERA_TYPES = [2]
-
-    def __init__(self, if_img=True, ignore_index=-1, **kwargs):
+class RoadConditionKITTIDataset(SemanticKITTIDataset):
+    def __init__(self, ignore_index=-1, **kwargs):
         self.ignore_index = ignore_index
         self.learning_map = self.get_learning_map(ignore_index)
         self.learning_map_inv = self.get_learning_map_inv(ignore_index)
-        super().__init__(if_img=if_img, ignore_index=ignore_index, **kwargs)
+        super().__init__(ignore_index=ignore_index, **kwargs)
 
     def get_data_list(self):
         split2seq = dict(
@@ -702,11 +700,69 @@ class RoadConditionKITTIDataset(SemanticKITTIImagePointDataset):
 
 
 @DATASETS.register_module()
-class RoadConditionKITTIPointDataset(SemanticKITTIDataset):
-    def __init__(self, ignore_index=-1, **kwargs):
+class RoadConditionKITTIImageDataset(SemanticKITTIImagePointDataset):
+    CAMERA_TYPES = [2]
+
+    def __init__(self, if_img=True, ignore_index=-1, **kwargs):
         self.ignore_index = ignore_index
-        self.learning_map = RoadConditionKITTIDataset.get_learning_map(ignore_index)
-        self.learning_map_inv = RoadConditionKITTIDataset.get_learning_map_inv(
-            ignore_index
+        self.learning_map = self.get_learning_map(ignore_index)
+        self.learning_map_inv = self.get_learning_map_inv(ignore_index)
+        super().__init__(if_img=if_img, ignore_index=ignore_index, **kwargs)
+
+    def get_data_list(self):
+        split2seq = dict(
+            train=set(range(68)) - set([66, 52, 47]),
+            val=[66, 52, 47],
+            test=[66, 52, 47],
         )
-        super().__init__(ignore_index=ignore_index, **kwargs)
+        if isinstance(self.split, str):
+            seq_list = split2seq[self.split]
+        elif isinstance(self.split, list):
+            seq_list = []
+            for split in self.split:
+                seq_list += split2seq[split]
+        else:
+            raise NotImplementedError
+        seq_list = sorted(seq_list)
+
+        data_list = []
+        split_list = {"train": [], "val": [], "test": []}
+        for seq in seq_list:
+            seq2 = str(seq).zfill(2)
+            seq_folder = os.path.join(self.data_root, "sequences", seq2)
+            seq_files = sorted(os.listdir(os.path.join(seq_folder, "velodyne")))
+            data_list += [
+                os.path.join(seq_folder, "velodyne", file) for file in seq_files
+            ]
+            if seq in split2seq["train"]:
+                split_list["train"].extend(
+                    [os.path.join(seq_folder, "velodyne", file) for file in seq_files]
+                )
+            elif seq in split2seq["val"]:
+                split_list["val"].extend(
+                    [os.path.join(seq_folder, "velodyne", file) for file in seq_files]
+                )
+            elif seq in split2seq["test"]:
+                split_list["test"].extend(
+                    [os.path.join(seq_folder, "velodyne", file) for file in seq_files]
+                )
+        _, self.sequence_offset, self.sequence_index = np.unique(
+            [os.path.dirname(os.path.dirname(data)) for data in data_list],
+            return_index=True,
+            return_inverse=True,
+        )
+        self.sequence_offset = np.append(self.sequence_offset, len(data_list))
+        return data_list, split_list
+
+    @staticmethod
+    def get_learning_map(ignore_index):
+        return RoadConditionKITTIDataset.get_learning_map(ignore_index)
+
+    @staticmethod
+    def get_learning_map_inv(ignore_index):
+        return RoadConditionKITTIDataset.get_learning_map_inv(ignore_index)
+
+
+@DATASETS.register_module()
+class RoadConditionKITTIPointDataset(RoadConditionKITTIDataset):
+    pass

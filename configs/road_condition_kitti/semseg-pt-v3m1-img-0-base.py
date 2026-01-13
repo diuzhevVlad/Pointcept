@@ -69,7 +69,7 @@ scheduler = dict(
 param_dicts = [dict(keyword="block", lr=0.0002)]
 
 # dataset settings
-dataset_type = "RoadConditionKITTIDataset"
+dataset_type = "RoadConditionKITTIImageDataset"
 data_root = "/data"
 ignore_index = -1
 names = [
