@@ -77,7 +77,7 @@ param_dicts = [dict(keyword="block", lr=0.0002)]
 
 # dataset settings
 dataset_type = "RoadConditionKITTIDataset"
-data_root = "data/road_condition_kitti"
+data_root = "/data"
 ignore_index = -1
 names = [
     "nonroad",
