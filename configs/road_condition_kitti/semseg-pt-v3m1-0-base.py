@@ -56,7 +56,7 @@ model = dict(
         pdnorm_conditions=("RoadConditionKITTI",),
     ),
     criteria=[
-        dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
+        dict(type="FocalLoss", gamma=2.0, alpha=0.5, loss_weight=1.0, ignore_index=-1),
         dict(type="LovaszLoss", mode="multiclass", loss_weight=1.0, ignore_index=-1),
     ],
 )
