@@ -285,6 +285,8 @@ class RandomVerticalCrop(object):
         if "coord" in data_dict.keys():
             threshold = np.random.uniform(self.height_threshold, max(self.height_threshold, data_dict["coord"][:, 2].max()))
             idx_crop = np.where(data_dict["coord"][:, 2] < threshold)[0]
+            if idx_crop.size == 0:
+                return data_dict
             data_dict = index_operator(data_dict, idx_crop)
 
         return data_dict

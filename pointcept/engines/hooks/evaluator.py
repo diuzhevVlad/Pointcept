@@ -204,6 +204,7 @@ class SemSegEvaluator(HookBase):
             self.trainer.writer.add_scalar("val/mIoU", m_iou, current_epoch)
             self.trainer.writer.add_scalar("val/mAcc", m_acc, current_epoch)
             self.trainer.writer.add_scalar("val/allAcc", all_acc, current_epoch)
+            target_sum = float(sum(target)) + 1e-10
             if self.trainer.cfg.enable_wandb:
                 wandb.log(
                     {
@@ -217,19 +218,28 @@ class SemSegEvaluator(HookBase):
                 )
             if self.write_cls_iou:
                 for i in range(self.trainer.cfg.data.num_classes):
+                    class_name = self.trainer.cfg.data.names[i]
                     self.trainer.writer.add_scalar(
-                        f"val/cls_{i}-{self.trainer.cfg.data.names[i]} IoU",
-                        iou_class[i],
+                        f"val/cls_{i}-{class_name} IoU", iou_class[i], current_epoch
+                    )
+                    self.trainer.writer.add_scalar(
+                        f"val/cls_{i}-{class_name} Acc", acc_class[i], current_epoch
+                    )
+                    self.trainer.writer.add_scalar(
+                        f"val/cls_{i}-{class_name} TargetRatio",
+                        target[i] / target_sum,
                         current_epoch,
                     )
                 if self.trainer.cfg.enable_wandb:
                     for i in range(self.trainer.cfg.data.num_classes):
+                        class_name = self.trainer.cfg.data.names[i]
                         wandb.log(
                             {
                                 "Epoch": current_epoch,
-                                f"val/cls_{i}-{self.trainer.cfg.data.names[i]} IoU": iou_class[
-                                    i
-                                ],
+                                f"val/cls_{i}-{class_name} IoU": iou_class[i],
+                                f"val/cls_{i}-{class_name} Acc": acc_class[i],
+                                f"val/cls_{i}-{class_name} TargetRatio": target[i]
+                                / target_sum,
                             },
                             step=wandb.run.step,
                         )

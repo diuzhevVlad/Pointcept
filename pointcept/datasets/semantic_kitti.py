@@ -623,6 +623,30 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
         self.learning_map_inv = self.get_learning_map_inv(ignore_index)
         super().__init__(ignore_index=ignore_index, **kwargs)
 
+    def get_data(self, idx):
+        data_dict = super().get_data(idx)
+        coord = data_dict.get("coord")
+        strength = data_dict.get("strength")
+        segment = data_dict.get("segment")
+
+        if coord is not None:
+            valid_mask = np.isfinite(coord).all(axis=1)
+            if strength is not None:
+                valid_mask &= np.isfinite(strength).all(axis=1)
+            if not np.all(valid_mask):
+                coord = coord.copy()
+                coord[~valid_mask] = 0.0
+                data_dict["coord"] = coord
+                if strength is not None:
+                    strength = strength.copy()
+                    strength[~valid_mask] = 0.0
+                    data_dict["strength"] = strength
+                if segment is not None:
+                    segment = segment.copy()
+                    segment[~valid_mask] = self.ignore_index
+                    data_dict["segment"] = segment
+        return data_dict
+
     def get_data_list(self):
         split2seq = dict(
             train=set(range(68)) - set([66, 52, 47]),

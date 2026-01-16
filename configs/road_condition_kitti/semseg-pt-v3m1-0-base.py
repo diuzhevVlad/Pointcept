@@ -4,7 +4,18 @@ _base_ = ["../_base_/default_runtime.py"]
 batch_size = 8  # bs: total bs in all gpus
 mix_prob = 0.8
 empty_cache = False
-enable_amp = True
+enable_amp = False
+
+# enable per-class TensorBoard logging
+hooks = [
+    dict(type="CheckpointLoader"),
+    dict(type="ModelHook"),
+    dict(type="IterationTimer", warmup_iter=2),
+    dict(type="InformationWriter"),
+    dict(type="SemSegEvaluator", write_cls_iou=True),
+    dict(type="CheckpointSaver", save_freq=5),
+    dict(type="PreciseEvaluator", test_last=False),
+]
 
 # model settings
 model = dict(
@@ -86,13 +97,13 @@ data = dict(
         split="train",
         data_root=data_root,
         transform=[
-            dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.6),
+            dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.2),
             dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
             dict(type="RandomRotate", angle=[-1/6, 1/6], axis="x", p=0.2),
             dict(type="RandomRotate", angle=[-1/6, 1/6], axis="y", p=0.2),
             dict(type="RandomScale", scale=[0.95, 1.05]),
             dict(type="RandomShift", shift=((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))),
-            dict(type="RandomFlip", p=0.3),
+            dict(type="RandomFlip", p=0.1),
             dict(type="RandomJitter", sigma=0.005, clip=0.02),
             dict(
                 type="GridSample",
