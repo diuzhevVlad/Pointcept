@@ -4,10 +4,12 @@ import torch_scatter
 import torch_cluster
 from peft import LoraConfig, get_peft_model
 from collections import OrderedDict
+import os
 
 from pointcept.models.losses import build_criteria
 from pointcept.models.utils.structure import Point
 from pointcept.models.utils import offset2batch
+from pointcept.utils import comm
 from .builder import MODELS, build_model
 
 
@@ -59,6 +61,115 @@ class DefaultSegmentorV2(nn.Module):
         if self.freeze_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
+        self._nan_hook_fired = False
+        self._enable_nan_hooks = os.getenv("POINTCEPT_NAN_DEBUG", "1") == "1"
+        if self._enable_nan_hooks:
+            self._register_nan_hooks()
+
+    @staticmethod
+    def _is_finite_tensor(tensor):
+        return torch.is_tensor(tensor) and torch.isfinite(tensor).all().item()
+
+    @staticmethod
+    def _collect_tensors(obj, prefix=""):
+        tensors = []
+        if torch.is_tensor(obj):
+            tensors.append((prefix, obj))
+        elif isinstance(obj, Point):
+            for key in obj.keys():
+                value = obj.get(key)
+                tensors.extend(DefaultSegmentorV2._collect_tensors(value, f"{prefix}.{key}"))
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                tensors.extend(DefaultSegmentorV2._collect_tensors(value, f"{prefix}.{key}"))
+        elif isinstance(obj, (list, tuple)):
+            for idx, value in enumerate(obj):
+                tensors.extend(DefaultSegmentorV2._collect_tensors(value, f"{prefix}[{idx}]"))
+        return tensors
+
+    @staticmethod
+    def _log_tensor_stats(name, tensor):
+        if not torch.is_tensor(tensor):
+            print(f"{name}: not a tensor ({type(tensor)})")
+            return
+        finite = torch.isfinite(tensor).all().item()
+        t_min = tensor.min().item() if finite else "non-finite"
+        t_max = tensor.max().item() if finite else "non-finite"
+        print(f"{name} finite: {finite}, min/max: {t_min}/{t_max}, shape: {tuple(tensor.shape)}")
+
+    def _log_nan_context(self, input_dict, seg_logits, loss, feat=None):
+        if not comm.is_main_process():
+            return
+        print("NaN/Inf detected in loss. Dumping debug context...")
+        if torch.is_tensor(loss):
+            print(f"loss finite: {torch.isfinite(loss).all().item()}, value: {loss}")
+        else:
+            print(f"loss type: {type(loss)}")
+
+        self._log_tensor_stats("seg_logits", seg_logits)
+        if feat is not None:
+            self._log_tensor_stats("feat", feat)
+
+        # Check input tensors for non-finite values
+        for key in ("coord", "strength", "segment"):
+            value = input_dict.get(key, None)
+            if torch.is_tensor(value):
+                self._log_tensor_stats(f"input {key}", value)
+
+        # Validate segment label range
+        segment = input_dict.get("segment", None)
+        if torch.is_tensor(segment) and torch.is_tensor(seg_logits):
+            num_classes = seg_logits.shape[-1]
+            ignore_index = -1
+            if hasattr(self.criteria, "criteria") and len(self.criteria.criteria) > 0:
+                ignore_index = getattr(self.criteria.criteria[0], "ignore_index", -1)
+            invalid_mask = ~(
+                (segment == ignore_index)
+                | ((segment >= 0) & (segment < num_classes))
+            )
+            invalid_count = invalid_mask.sum().item()
+            if invalid_count > 0:
+                print(
+                    f"invalid labels: {invalid_count} out of {segment.numel()}, "
+                    f"ignore_index={ignore_index}, num_classes={num_classes}"
+                )
+
+        # Compute per-criterion losses for isolation
+        if hasattr(self.criteria, "criteria") and torch.is_tensor(seg_logits):
+            for idx, crit in enumerate(self.criteria.criteria):
+                try:
+                    val = crit(seg_logits, input_dict["segment"])
+                    finite = torch.isfinite(val).all().item()
+                    print(f"criterion[{idx}] {crit.__class__.__name__}: finite={finite}, value={val}")
+                except Exception as exc:
+                    print(f"criterion[{idx}] {crit.__class__.__name__} raised: {exc}")
+
+    def _register_nan_hooks(self):
+        def hook_fn(module, inputs, outputs):
+            if self._nan_hook_fired or not comm.is_main_process():
+                return
+            input_tensors = self._collect_tensors(inputs, "input")
+            output_tensors = self._collect_tensors(outputs, "output")
+            for name, tensor in input_tensors + output_tensors:
+                if torch.is_tensor(tensor) and not torch.isfinite(tensor).all().item():
+                    self._nan_hook_fired = True
+                    print(f"NaN/Inf detected in module: {module.__class__.__name__}")
+                    self._log_tensor_stats(name, tensor)
+                    # Extra detail for Linear layers to isolate source
+                    if isinstance(module, nn.Linear):
+                        if len(input_tensors) > 0:
+                            self._log_tensor_stats("linear.input", input_tensors[0][1])
+                        if torch.is_tensor(module.weight):
+                            self._log_tensor_stats("linear.weight", module.weight)
+                        if module.bias is not None:
+                            self._log_tensor_stats("linear.bias", module.bias)
+                    # Log only; allow training loop to handle non-finite loss.
+                    return
+
+        for name, module in self.named_modules():
+            if module is self:
+                continue
+            module.register_forward_hook(hook_fn)
 
     def forward(self, input_dict, return_point=False):
         point = Point(input_dict)
@@ -83,10 +194,14 @@ class DefaultSegmentorV2(nn.Module):
         # train
         if self.training:
             loss = self.criteria(seg_logits, input_dict["segment"])
+            if torch.is_tensor(loss) and not torch.isfinite(loss).all().item():
+                self._log_nan_context(input_dict, seg_logits, loss, feat=feat)
             return_dict["loss"] = loss
         # eval
         elif "segment" in input_dict.keys():
             loss = self.criteria(seg_logits, input_dict["segment"])
+            if torch.is_tensor(loss) and not torch.isfinite(loss).all().item():
+                self._log_nan_context(input_dict, seg_logits, loss, feat=feat)
             return_dict["loss"] = loss
             return_dict["seg_logits"] = seg_logits
         # test

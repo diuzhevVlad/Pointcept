@@ -12,6 +12,7 @@ import wandb
 import torch
 import torch.nn as nn
 import torch.utils.data
+import torch.distributed as dist
 from packaging import version
 from functools import partial
 from pathlib import Path
@@ -205,6 +206,23 @@ class Trainer(TrainerBase):
             loss = (
                 output_dict["loss"] / self.cfg.gradient_accumulation_steps
             )  # scale loss
+
+        # Skip step on non-finite loss (must be consistent across ranks)
+        loss_finite = torch.isfinite(loss).all()
+        if comm.get_world_size() > 1 and dist.is_available() and dist.is_initialized():
+            flag = loss_finite.to(dtype=torch.int32)
+            dist.all_reduce(flag, op=dist.ReduceOp.MIN)
+            loss_finite = flag.bool()
+        if not loss_finite.item():
+            if comm.is_main_process():
+                self.logger.warning(
+                    f"Skipping step due to non-finite loss at epoch {self.epoch}, "
+                    f"iter {self.comm_info.get('iter', 'n/a')}"
+                )
+            self.optimizer.zero_grad(set_to_none=True)
+            self._gradient_accumulation_counter = 0
+            self.comm_info["model_output_dict"] = output_dict
+            return
 
         # Backward pass
         if self.cfg.enable_amp:

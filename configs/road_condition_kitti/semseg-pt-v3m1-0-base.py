@@ -1,10 +1,10 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
-batch_size = 8  # bs: total bs in all gpus
+batch_size = 2  # bs: total bs in all gpus
 mix_prob = 0.8
 empty_cache = False
-enable_amp = False
+enable_amp = True
 
 # enable per-class TensorBoard logging
 hooks = [
@@ -20,7 +20,7 @@ hooks = [
 # model settings
 model = dict(
     type="DefaultSegmentorV2",
-    num_classes=6,
+    num_classes=5,
     backbone_out_channels=64,
     backbone=dict(
         type="PT-v3m1",
@@ -89,7 +89,7 @@ names = [
 ]
 
 data = dict(
-    num_classes=6,
+    num_classes=5,
     ignore_index=ignore_index,
     names=names,
     train=dict(
@@ -97,10 +97,10 @@ data = dict(
         split="train",
         data_root=data_root,
         transform=[
-            dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.2),
+            # dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.2),
             dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            dict(type="RandomRotate", angle=[-1/6, 1/6], axis="x", p=0.2),
-            dict(type="RandomRotate", angle=[-1/6, 1/6], axis="y", p=0.2),
+            dict(type="RandomRotate", angle=[-1/12, 1/12], axis="x", p=0.2),
+            dict(type="RandomRotate", angle=[-1/12, 1/12], axis="y", p=0.2),
             dict(type="RandomScale", scale=[0.95, 1.05]),
             dict(type="RandomShift", shift=((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))),
             dict(type="RandomFlip", p=0.1),

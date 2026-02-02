@@ -648,11 +648,15 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
         return data_dict
 
     def get_data_list(self):
+        total_set = [75] # sorted(list(set(range(80)) - set([68, 69, 70, 71, 72, 73, 74])))[::3]
+        val_set = [75]
+        train_set = total_set
         split2seq = dict(
-            train=set(range(68)) - set([66, 52, 47]),
-            val=[66, 52, 47],
-            test=[66, 52, 47],
+            train=train_set,
+            val=val_set,
+            test=val_set,
         )
+
         if isinstance(self.split, str):
             seq_list = split2seq[self.split]
         elif isinstance(self.split, list):
@@ -683,7 +687,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
             4: ignore_index,  # pothole (ignored)
             5: ignore_index,  # hill (ignored)
             6: 4,  # slush
-            7: 5,  # moisture
+            7: 2,  # moisture
         }
         return {
             raw_id: learning_map.get(raw_id, ignore_index)
@@ -699,7 +703,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
             2: 2,  # wet
             3: 3,  # snow
             4: 6,  # slush
-            5: 7,  # moisture
+            # 5: 7,  # moisture
         }
         return learning_map_inv
 
