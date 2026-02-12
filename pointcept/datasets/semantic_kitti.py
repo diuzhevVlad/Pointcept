@@ -656,6 +656,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
             val=val_set,
             test=val_set,
         )
+
         if isinstance(self.split, str):
             seq_list = split2seq[self.split]
         elif isinstance(self.split, list):
@@ -686,7 +687,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
             4: ignore_index,  # pothole (ignored)
             5: ignore_index,  # hill (ignored)
             6: 4,  # slush
-            7: 5,  # moisture
+            7: 2,  # moisture
         }
         return {
             raw_id: learning_map.get(raw_id, ignore_index)
@@ -704,7 +705,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
             # 4: 4,  # pothole
             # 5: 5,  # hill
             4: 6,  # slush
-            5: 7,  # moisture
+            # 5: 7,  # moisture
         }
         return learning_map_inv
 

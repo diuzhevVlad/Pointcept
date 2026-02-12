@@ -20,7 +20,7 @@ hooks = [
 # model settings
 model = dict(
     type="DefaultSegmentorV2",
-    num_classes=6,
+    num_classes=5,
     backbone_out_channels=64,
     backbone=dict(
         type="PT-v3m1",
@@ -91,7 +91,7 @@ names = [
 ]
 
 data = dict(
-    num_classes=6,
+    num_classes=5,
     ignore_index=ignore_index,
     names=names,
     train=dict(
@@ -102,6 +102,8 @@ data = dict(
             # dict(type="AddObstaclePTV3", p=0.1),
             dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.2),
             dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
+            dict(type="RandomRotate", angle=[-1/12, 1/12], axis="x", p=0.2),
+            dict(type="RandomRotate", angle=[-1/12, 1/12], axis="y", p=0.2),
             dict(type="RandomRotate", angle=[-1/12, 1/12], axis="x", p=0.2),
             dict(type="RandomRotate", angle=[-1/12, 1/12], axis="y", p=0.2),
             dict(type="RandomScale", scale=[0.95, 1.05]),
