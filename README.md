@@ -1,3 +1,7 @@
+```
+sh scripts/train.sh -p python -g 2 -d road_condition_kitti -c semseg-pt-v3m1-0-base -n semseg-pt-v3m1-0-base
+```
+
 <p align="center">
     <!-- pypi-strip -->
     <picture>

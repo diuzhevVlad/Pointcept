@@ -272,6 +272,149 @@ class RandomRotate(object):
         return data_dict
 
 @TRANSFORMS.register_module()
+class AddObstaclePTV3(object):
+    def __init__(
+        self,
+        p=0.1,
+        coord_key="coord",
+        label_key="segment",
+        amplitude_range=(0.05, 0.1),
+        sigma_range=(0.1, 0.4),
+        support_factor=2.0,
+        n_gaussians=3,
+        label_exclude=(0, 4, 5),
+        eps=1e-6,
+    ):
+        self.p = p
+        self.coord_key = coord_key
+        self.label_key = label_key
+        self.amplitude_range = amplitude_range
+        self.sigma_range = sigma_range
+        self.support_factor = support_factor
+        self.n_gaussians = n_gaussians
+        self.label_exclude = set(label_exclude)
+        self.eps = eps
+        self.rng = np.random.default_rng()
+
+        self._tries = 0
+
+    def _label_mask(self, labels):
+        mask = np.ones_like(labels, dtype=bool)
+        for v in self.label_exclude:
+            mask &= labels != v
+        return mask
+
+    def _gaussian_addition(self, points, labels):
+        label_mask = self._label_mask(labels)
+        if not np.any(label_mask):
+            return np.zeros(points.shape[0], dtype=float)
+
+        xy = points[:, :2][label_mask]
+        first_center = xy[self.rng.integers(len(xy))]
+        first_sigma = self.rng.uniform(self.sigma_range[0], self.sigma_range[1])
+        first_support = first_sigma * self.support_factor
+
+        centers = [first_center]
+        sigmas = [first_sigma]
+        supports = [first_support]
+        amplitudes = [self.rng.uniform(self.amplitude_range[0], self.amplitude_range[1])]
+
+        for _ in range(self.n_gaussians):
+            center = first_center + self.rng.uniform(-first_support, first_support, size=2)
+            sigma = self.rng.uniform(self.sigma_range[0], self.sigma_range[1])
+            support = sigma * self.support_factor
+            centers.append(center)
+            sigmas.append(sigma)
+            supports.append(support)
+            amplitudes.append(self.rng.uniform(self.amplitude_range[0], self.amplitude_range[1]))
+
+        x, y = points[:, 0], points[:, 1]
+        z = np.zeros_like(x, dtype=float)
+        total_mask = np.zeros_like(x, dtype=bool)
+
+        for (x0, y0), A, sigma, R in zip(centers, amplitudes, sigmas, supports):
+            dx = x - x0
+            dy = y - y0
+            r2 = dx**2 + dy**2
+            mask = r2 <= R**2
+            total_mask |= mask
+            z[mask] -= A * np.exp(-r2[mask] / (2 * sigma**2))
+
+        if self._tries >= 5:
+            self._tries = 0
+            return np.zeros_like(x, dtype=float)
+        if not np.any(total_mask) or not np.any(label_mask):
+            self._tries += 1
+            return self._gaussian_addition(points, labels)
+        if np.sum(total_mask & label_mask) / np.sum(total_mask) < 0.97:
+            self._tries += 1
+            return self._gaussian_addition(points, labels)
+        self._tries = 0
+        sign = -1 if self.rng.random() > 0.5 else 1
+        return sign * z
+
+    def _cosine_bump_addition(self, points, labels):
+        label_mask = self._label_mask(labels)
+        if not np.any(label_mask):
+            return np.zeros(points.shape[0], dtype=float)
+
+        candidate_points = points[label_mask]
+        if len(candidate_points) == 0:
+            return np.zeros(points.shape[0], dtype=float)
+        centre = candidate_points[self.rng.integers(len(candidate_points))]
+
+        width = self.rng.uniform(3, 7)
+        length = self.rng.uniform(0.2, 0.6)
+        height = self.rng.uniform(0.05, 0.1)
+
+        u = points[:, 0] - centre[0]
+        v = points[:, 1] - centre[1]
+        bump = np.zeros_like(u)
+
+        mask_u = np.abs(u) < length / 2
+        mask_v = np.abs(v) < width / 2
+        mask = mask_u & mask_v
+
+        core = height * 0.5 * (1 + np.cos(np.pi * u[mask] / (length / 2)))
+        bump[mask] = core
+
+        if self._tries >= 5:
+            self._tries = 0
+            return np.zeros_like(u)
+        if not np.any(mask) or not np.any(label_mask):
+            self._tries += 1
+            return self._cosine_bump_addition(points, labels)
+        if np.sum(mask & label_mask) / np.sum(mask) < 0.97:
+            self._tries += 1
+            return self._cosine_bump_addition(points, labels)
+        self._tries = 0
+        return bump
+
+    def __call__(self, data_dict):
+        if random.random() > self.p:
+            return data_dict
+        if self.coord_key not in data_dict or self.label_key not in data_dict:
+            return data_dict
+        points = data_dict[self.coord_key]
+        labels = data_dict[self.label_key]
+
+        if self.rng.random() > 0.5:
+            addition = self._gaussian_addition(points, labels)
+        else:
+            addition = self._cosine_bump_addition(points, labels)
+
+        updated_points_mask = np.abs(addition) > self.eps
+        labels[addition < -self.eps] = 4
+        labels[addition > self.eps] = 5
+        addition[updated_points_mask] += self.rng.normal(0, 0.01, np.sum(updated_points_mask))
+        points[:, 2] += addition
+
+        data_dict[self.coord_key] = points
+        data_dict[self.label_key] = labels
+        
+        return data_dict
+
+@TRANSFORMS.register_module()
 class RandomVerticalCrop(object):
     def __init__(self, min_height_threshold=0, always_apply=False, p=0.2):
         self.height_threshold = min_height_threshold

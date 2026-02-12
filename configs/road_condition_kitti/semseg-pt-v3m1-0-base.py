@@ -1,10 +1,10 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
-batch_size = 8  # bs: total bs in all gpus
+batch_size = 22  # bs: total bs in all gpus
 mix_prob = 0.8
 empty_cache = False
-enable_amp = False
+enable_amp = True
 
 # enable per-class TensorBoard logging
 hooks = [
@@ -13,7 +13,7 @@ hooks = [
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
     dict(type="SemSegEvaluator", write_cls_iou=True),
-    dict(type="CheckpointSaver", save_freq=5),
+    dict(type="CheckpointSaver", save_freq=1),
     dict(type="PreciseEvaluator", test_last=False),
 ]
 
@@ -56,14 +56,14 @@ model = dict(
         pdnorm_conditions=("RoadConditionKITTI",),
     ),
     criteria=[
-        dict(type="FocalLoss", gamma=2.0, alpha=0.5, loss_weight=1.0, ignore_index=-1),
+        dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
         dict(type="LovaszLoss", mode="multiclass", loss_weight=1.0, ignore_index=-1),
     ],
 )
 
 # scheduler settings
-epoch = 50
-eval_epoch = 50
+epoch = 100
+eval_epoch = 100
 optimizer = dict(type="AdamW", lr=0.002, weight_decay=0.005)
 scheduler = dict(
     type="OneCycleLR",
@@ -84,6 +84,8 @@ names = [
     "dry",
     "wet",
     "snow",
+    # "pothole",
+    # "hill",
     "slush",
     "moisture",
 ]
@@ -97,10 +99,11 @@ data = dict(
         split="train",
         data_root=data_root,
         transform=[
+            # dict(type="AddObstaclePTV3", p=0.1),
             dict(type="RandomVerticalCrop", min_height_threshold=-0.5, p=0.2),
             dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            dict(type="RandomRotate", angle=[-1/6, 1/6], axis="x", p=0.2),
-            dict(type="RandomRotate", angle=[-1/6, 1/6], axis="y", p=0.2),
+            dict(type="RandomRotate", angle=[-1/12, 1/12], axis="x", p=0.2),
+            dict(type="RandomRotate", angle=[-1/12, 1/12], axis="y", p=0.2),
             dict(type="RandomScale", scale=[0.95, 1.05]),
             dict(type="RandomShift", shift=((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))),
             dict(type="RandomFlip", p=0.1),
