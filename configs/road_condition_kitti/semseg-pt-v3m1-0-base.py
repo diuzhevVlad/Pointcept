@@ -1,10 +1,17 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
-batch_size = 22  # bs: total bs in all gpus
+batch_size = 52  # bs: total bs in all gpus
 mix_prob = 0.8
 empty_cache = False
 enable_amp = True
+rare_batch_sampling = dict(
+    enabled=True,
+    classes=[4, 5],  # pothole, hill
+    min_rare=1,
+    shuffle=True,
+    drop_last=True,
+)
 
 # enable per-class TensorBoard logging
 hooks = [
@@ -20,7 +27,7 @@ hooks = [
 # model settings
 model = dict(
     type="DefaultSegmentorV2",
-    num_classes=5,
+    num_classes=8,
     backbone_out_channels=64,
     backbone=dict(
         type="PT-v3m1",
@@ -84,14 +91,14 @@ names = [
     "dry",
     "wet",
     "snow",
-    # "pothole",
-    # "hill",
+    "pothole",
+    "hill",
     "slush",
     "moisture",
 ]
 
 data = dict(
-    num_classes=5,
+    num_classes=8,
     ignore_index=ignore_index,
     names=names,
     train=dict(

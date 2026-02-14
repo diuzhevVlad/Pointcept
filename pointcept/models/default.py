@@ -197,6 +197,8 @@ class DefaultSegmentorV2(nn.Module):
             if torch.is_tensor(loss) and not torch.isfinite(loss).all().item():
                 self._log_nan_context(input_dict, seg_logits, loss, feat=feat)
             return_dict["loss"] = loss
+            # Expose detached logits for training metrics/logging hooks.
+            return_dict["seg_logits"] = seg_logits.detach()
         # eval
         elif "segment" in input_dict.keys():
             loss = self.criteria(seg_logits, input_dict["segment"])

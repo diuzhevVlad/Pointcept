@@ -181,21 +181,27 @@ class SemSegEvaluator(HookBase):
         target = self.trainer.storage.history("val_target").total
         iou_class = intersection / (union + 1e-10)
         acc_class = intersection / (target + 1e-10)
+        pred_count = union - target + intersection
+        precision_class = intersection / (pred_count + 1e-10)
+        recall_class = acc_class
         m_iou = np.mean(iou_class)
         m_acc = np.mean(acc_class)
+        m_precision = np.mean(precision_class)
+        m_recall = np.mean(recall_class)
         all_acc = sum(intersection) / (sum(target) + 1e-10)
         self.trainer.logger.info(
-            "Val result: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}.".format(
-                m_iou, m_acc, all_acc
+            "Val result: mIoU/mAcc/mPrecision/mRecall/allAcc {:.4f}/{:.4f}/{:.4f}/{:.4f}/{:.4f}.".format(
+                m_iou, m_acc, m_precision, m_recall, all_acc
             )
         )
         for i in range(self.trainer.cfg.data.num_classes):
             self.trainer.logger.info(
-                "Class_{idx}-{name} Result: iou/accuracy {iou:.4f}/{accuracy:.4f}".format(
+                "Class_{idx}-{name} Result: iou/precision/recall {iou:.4f}/{precision:.4f}/{recall:.4f}".format(
                     idx=i,
                     name=self.trainer.cfg.data.names[i],
                     iou=iou_class[i],
-                    accuracy=acc_class[i],
+                    precision=precision_class[i],
+                    recall=recall_class[i],
                 )
             )
         current_epoch = self.trainer.epoch + 1
@@ -203,8 +209,11 @@ class SemSegEvaluator(HookBase):
             self.trainer.writer.add_scalar("val/loss", loss_avg, current_epoch)
             self.trainer.writer.add_scalar("val/mIoU", m_iou, current_epoch)
             self.trainer.writer.add_scalar("val/mAcc", m_acc, current_epoch)
+            self.trainer.writer.add_scalar(
+                "val/mPrecision", m_precision, current_epoch
+            )
+            self.trainer.writer.add_scalar("val/mRecall", m_recall, current_epoch)
             self.trainer.writer.add_scalar("val/allAcc", all_acc, current_epoch)
-            target_sum = float(sum(target)) + 1e-10
             if self.trainer.cfg.enable_wandb:
                 wandb.log(
                     {
@@ -212,6 +221,8 @@ class SemSegEvaluator(HookBase):
                         "val/loss": loss_avg,
                         "val/mIoU": m_iou,
                         "val/mAcc": m_acc,
+                        "val/mPrecision": m_precision,
+                        "val/mRecall": m_recall,
                         "val/allAcc": all_acc,
                     },
                     step=wandb.run.step,
@@ -223,11 +234,13 @@ class SemSegEvaluator(HookBase):
                         f"val/cls_{i}-{class_name} IoU", iou_class[i], current_epoch
                     )
                     self.trainer.writer.add_scalar(
-                        f"val/cls_{i}-{class_name} Acc", acc_class[i], current_epoch
+                        f"val/cls_{i}-{class_name} Precision",
+                        precision_class[i],
+                        current_epoch,
                     )
                     self.trainer.writer.add_scalar(
-                        f"val/cls_{i}-{class_name} TargetRatio",
-                        target[i] / target_sum,
+                        f"val/cls_{i}-{class_name} Recall",
+                        recall_class[i],
                         current_epoch,
                     )
                 if self.trainer.cfg.enable_wandb:
@@ -237,9 +250,10 @@ class SemSegEvaluator(HookBase):
                             {
                                 "Epoch": current_epoch,
                                 f"val/cls_{i}-{class_name} IoU": iou_class[i],
-                                f"val/cls_{i}-{class_name} Acc": acc_class[i],
-                                f"val/cls_{i}-{class_name} TargetRatio": target[i]
-                                / target_sum,
+                                f"val/cls_{i}-{class_name} Precision": precision_class[
+                                    i
+                                ],
+                                f"val/cls_{i}-{class_name} Recall": recall_class[i],
                             },
                             step=wandb.run.step,
                         )

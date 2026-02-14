@@ -162,7 +162,12 @@ class Trainer(TrainerBase):
             for self.epoch in range(self.start_epoch, self.max_epoch):
                 # => before epoch
                 if comm.get_world_size() > 1:
-                    self.train_loader.sampler.set_epoch(self.epoch)
+                    if hasattr(self.train_loader, "batch_sampler") and hasattr(
+                        self.train_loader.batch_sampler, "set_epoch"
+                    ):
+                        self.train_loader.batch_sampler.set_epoch(self.epoch)
+                    else:
+                        self.train_loader.sampler.set_epoch(self.epoch)
                 self.model.train()
                 self.data_iterator = enumerate(self.train_loader)
                 self.before_epoch()
@@ -301,10 +306,28 @@ class Trainer(TrainerBase):
     def build_train_loader(self):
         train_data = build_dataset(self.cfg.data.train)
 
-        if comm.get_world_size() > 1:
-            train_sampler = torch.utils.data.distributed.DistributedSampler(train_data)
-        else:
+        rare_cfg = getattr(self.cfg, "rare_batch_sampling", None)
+        if rare_cfg and rare_cfg.get("enabled", False):
+            from pointcept.datasets.samplers import RareClassBatchSampler
+
             train_sampler = None
+            train_batch_sampler = RareClassBatchSampler(
+                train_data,
+                batch_size=self.cfg.batch_size_per_gpu,
+                rare_classes=rare_cfg["classes"],
+                min_rare=rare_cfg.get("min_rare", 1),
+                shuffle=rare_cfg.get("shuffle", True),
+                drop_last=rare_cfg.get("drop_last", True),
+                seed=self.cfg.seed,
+            )
+        else:
+            train_batch_sampler = None
+            if comm.get_world_size() > 1:
+                train_sampler = torch.utils.data.distributed.DistributedSampler(
+                    train_data
+                )
+            else:
+                train_sampler = None
 
         init_fn = (
             partial(
@@ -317,18 +340,29 @@ class Trainer(TrainerBase):
             else None
         )
 
-        train_loader = torch.utils.data.DataLoader(
-            train_data,
-            batch_size=self.cfg.batch_size_per_gpu,
-            shuffle=(train_sampler is None),
-            num_workers=self.cfg.num_worker_per_gpu,
-            sampler=train_sampler,
-            collate_fn=partial(point_collate_fn, mix_prob=self.cfg.mix_prob),
-            pin_memory=True,
-            worker_init_fn=init_fn,
-            drop_last=len(train_data) > self.cfg.batch_size,
-            persistent_workers=True,
-        )
+        if train_batch_sampler is not None:
+            train_loader = torch.utils.data.DataLoader(
+                train_data,
+                batch_sampler=train_batch_sampler,
+                num_workers=self.cfg.num_worker_per_gpu,
+                collate_fn=partial(point_collate_fn, mix_prob=self.cfg.mix_prob),
+                pin_memory=True,
+                worker_init_fn=init_fn,
+                persistent_workers=True,
+            )
+        else:
+            train_loader = torch.utils.data.DataLoader(
+                train_data,
+                batch_size=self.cfg.batch_size_per_gpu,
+                shuffle=(train_sampler is None),
+                num_workers=self.cfg.num_worker_per_gpu,
+                sampler=train_sampler,
+                collate_fn=partial(point_collate_fn, mix_prob=self.cfg.mix_prob),
+                pin_memory=True,
+                worker_init_fn=init_fn,
+                drop_last=len(train_data) > self.cfg.batch_size,
+                persistent_workers=True,
+            )
         return train_loader
 
     def build_val_loader(self):

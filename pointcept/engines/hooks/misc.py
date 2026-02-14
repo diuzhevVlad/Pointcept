@@ -25,6 +25,7 @@ from pointcept.utils.comm import is_main_process, synchronize
 from pointcept.utils.cache import shared_dict
 from pointcept.utils.scheduler import CosineScheduler
 import pointcept.utils.comm as comm
+from pointcept.utils.misc import intersection_and_union_gpu
 
 from .default import HookBase
 from .builder import HOOKS
@@ -82,6 +83,10 @@ class InformationWriter(HookBase):
     def __init__(self):
         self.curr_iter = 0
         self.model_output_keys = []
+        self.train_intersection = None
+        self.train_union = None
+        self.train_target = None
+        self.train_metric_updated = False
 
     def before_train(self):
         self.trainer.comm_info["iter_info"] = ""
@@ -90,6 +95,18 @@ class InformationWriter(HookBase):
             wandb.define_metric("params/*", step_metric="Iter")
             wandb.define_metric("train_batch/*", step_metric="Iter")
             wandb.define_metric("train/*", step_metric="Epoch")
+
+    def before_epoch(self):
+        self.train_metric_updated = False
+        self.train_intersection = torch.zeros(
+            self.trainer.cfg.data.num_classes, device="cuda", dtype=torch.float64
+        )
+        self.train_union = torch.zeros(
+            self.trainer.cfg.data.num_classes, device="cuda", dtype=torch.float64
+        )
+        self.train_target = torch.zeros(
+            self.trainer.cfg.data.num_classes, device="cuda", dtype=torch.float64
+        )
 
     def before_step(self):
         self.curr_iter += 1
@@ -102,11 +119,30 @@ class InformationWriter(HookBase):
         self.trainer.comm_info["iter_info"] += info
 
     def after_step(self):
+        self.model_output_keys = []
         if "model_output_dict" in self.trainer.comm_info.keys():
             model_output_dict = self.trainer.comm_info["model_output_dict"]
-            self.model_output_keys = model_output_dict.keys()
-            for key in self.model_output_keys:
-                self.trainer.storage.put_scalar(key, model_output_dict[key].item())
+            for key, value in model_output_dict.items():
+                if torch.is_tensor(value) and value.dim() == 0:
+                    self.model_output_keys.append(key)
+                    self.trainer.storage.put_scalar(key, value.item())
+
+            # Optional training metrics for segmentation models exposing seg_logits.
+            seg_logits = model_output_dict.get("seg_logits", None)
+            input_dict = self.trainer.comm_info.get("input_dict", {})
+            segment = input_dict.get("segment", None)
+            if torch.is_tensor(seg_logits) and torch.is_tensor(segment):
+                pred = seg_logits.max(1)[1]
+                intersection, union, target = intersection_and_union_gpu(
+                    pred,
+                    segment,
+                    self.trainer.cfg.data.num_classes,
+                    self.trainer.cfg.data.ignore_index,
+                )
+                self.train_intersection += intersection.to(torch.float64)
+                self.train_union += union.to(torch.float64)
+                self.train_target += target.to(torch.float64)
+                self.train_metric_updated = True
 
         for key in self.model_output_keys:
             self.trainer.comm_info["iter_info"] += "{key}: {value:.4f} ".format(
@@ -144,6 +180,38 @@ class InformationWriter(HookBase):
             epoch_info += "{key}: {value:.4f} ".format(
                 key=key, value=self.trainer.storage.history(key).avg
             )
+        if self.train_intersection is not None and self.train_metric_updated:
+            intersection = self.train_intersection.clone()
+            union = self.train_union.clone()
+            target = self.train_target.clone()
+            if comm.get_world_size() > 1:
+                torch.distributed.all_reduce(intersection)
+                torch.distributed.all_reduce(union)
+                torch.distributed.all_reduce(target)
+            intersection = intersection.cpu().numpy()
+            union = union.cpu().numpy()
+            target = target.cpu().numpy()
+            pred_count = union - target + intersection
+            iou_class = intersection / (union + 1e-10)
+            acc_class = intersection / (target + 1e-10)
+            precision_class = intersection / (pred_count + 1e-10)
+            recall_class = acc_class
+            m_iou = iou_class.mean()
+            m_acc = acc_class.mean()
+            m_precision = precision_class.mean()
+            m_recall = recall_class.mean()
+            all_acc = intersection.sum() / (target.sum() + 1e-10)
+            epoch_info += (
+                "mIoU: {m_iou:.4f} mAcc: {m_acc:.4f} "
+                "mPrecision: {m_precision:.4f} mRecall: {m_recall:.4f} "
+                "allAcc: {all_acc:.4f} "
+            ).format(
+                m_iou=m_iou,
+                m_acc=m_acc,
+                m_precision=m_precision,
+                m_recall=m_recall,
+                all_acc=all_acc,
+            )
         self.trainer.logger.info(epoch_info)
         if self.trainer.writer is not None:
             for key in self.model_output_keys:
@@ -152,6 +220,32 @@ class InformationWriter(HookBase):
                     self.trainer.storage.history(key).avg,
                     self.trainer.epoch + 1,
                 )
+            if self.train_intersection is not None and self.train_metric_updated:
+                current_epoch = self.trainer.epoch + 1
+                self.trainer.writer.add_scalar("train/mIoU", m_iou, current_epoch)
+                self.trainer.writer.add_scalar("train/mAcc", m_acc, current_epoch)
+                self.trainer.writer.add_scalar(
+                    "train/mPrecision", m_precision, current_epoch
+                )
+                self.trainer.writer.add_scalar("train/mRecall", m_recall, current_epoch)
+                self.trainer.writer.add_scalar("train/allAcc", all_acc, current_epoch)
+                for i in range(self.trainer.cfg.data.num_classes):
+                    class_name = self.trainer.cfg.data.names[i]
+                    self.trainer.writer.add_scalar(
+                        f"train/cls_{i}-{class_name} IoU",
+                        iou_class[i],
+                        current_epoch,
+                    )
+                    self.trainer.writer.add_scalar(
+                        f"train/cls_{i}-{class_name} Precision",
+                        precision_class[i],
+                        current_epoch,
+                    )
+                    self.trainer.writer.add_scalar(
+                        f"train/cls_{i}-{class_name} Recall",
+                        recall_class[i],
+                        current_epoch,
+                    )
 
             if self.trainer.cfg.enable_wandb:
 
@@ -160,6 +254,19 @@ class InformationWriter(HookBase):
                         {
                             "Epoch": self.trainer.epoch + 1,
                             f"train/{key}": self.trainer.storage.history(key).avg,
+                        },
+                        step=wandb.run.step,
+                    )
+                if self.train_intersection is not None and self.train_metric_updated:
+                    current_epoch = self.trainer.epoch + 1
+                    wandb.log(
+                        {
+                            "Epoch": current_epoch,
+                            "train/mIoU": m_iou,
+                            "train/mAcc": m_acc,
+                            "train/mPrecision": m_precision,
+                            "train/mRecall": m_recall,
+                            "train/allAcc": all_acc,
                         },
                         step=wandb.run.step,
                     )
