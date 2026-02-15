@@ -8,7 +8,7 @@ enable_amp = True
 rare_batch_sampling = dict(
     enabled=True,
     classes=[4, 5],  # pothole, hill
-    min_rare=1,
+    min_rare=10,
     shuffle=True,
     drop_last=True,
 )

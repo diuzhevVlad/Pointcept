@@ -648,7 +648,7 @@ class RoadConditionKITTIDataset(SemanticKITTIDataset):
         return data_dict
 
     def get_data_list(self):
-        total_set = sorted(list(set(range(94)) - set([68, 69, 71, 73, 74, 75, 76, 77, 79, 13, 23, 37, 51])))
+        total_set = sorted(list(set(range(94)) - set([68, 69, 71, 73, 74, 75, 76, 77, 79, 13, 23, 37, 51, 80])))
         val_set = [29, 81, 82, 47, 84, 87, 89, 92]
         train_set = sorted(list(set(total_set) - set(val_set)))
         split2seq = dict(
